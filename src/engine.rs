@@ -18,7 +18,9 @@ use evdev::{Device, FFEffectData, FFEffectKind, FFReplay, FFTrigger};
 use crate::config::{Action, Button, Click, Config};
 use crate::gamepad::{Axis, Event};
 use crate::out::Out;
+use crate::status::Shared;
 use crate::t3::T3;
+use crate::tray::{Handle, Tray};
 
 pub struct Engine {
     cfg: Config,
@@ -37,11 +39,22 @@ pub struct Engine {
     /// lx, ly, rx, ry.
     axes: [f64; 4],
     device: Option<PathBuf>,
+    status: Shared,
+    tray: Option<Handle<Tray>>,
 }
 
 impl Engine {
-    pub fn new(cfg: Config, out: Out, t3: Option<T3>) -> Engine {
+    pub fn new(
+        cfg: Config,
+        out: Out,
+        t3: Option<T3>,
+        status: Shared,
+        tray: Option<Handle<Tray>>,
+    ) -> Engine {
+        status.lock().unwrap().enabled = cfg.enabled;
         Engine {
+            status,
+            tray,
             enabled: cfg.enabled,
             cfg,
             out,
@@ -57,10 +70,12 @@ impl Engine {
     }
 
     pub fn set_config(&mut self, cfg: Config) {
-        if cfg.enabled != self.cfg.enabled {
-            self.enabled = cfg.enabled;
-        }
+        let changed = cfg.enabled != self.cfg.enabled;
+        let enabled = cfg.enabled;
         self.cfg = cfg;
+        if changed {
+            self.set_enabled(enabled, false);
+        }
         self.active_combos.clear();
     }
 
@@ -69,12 +84,14 @@ impl Engine {
             Event::Connected { name, path } => {
                 eprintln!("[pad] controle: {name} ({})", path.display());
                 self.device = Some(path);
+                self.status.lock().unwrap().controller = Some(name);
                 if self.enabled {
                     self.rumble(1);
                 }
             }
             Event::Disconnected => {
                 self.device = None;
+                self.status.lock().unwrap().controller = None;
                 self.release_all();
             }
             Event::Axis(a, v) => {
@@ -86,8 +103,12 @@ impl Engine {
                 };
                 self.axes[i] = v;
             }
-            Event::Button(b, true) => self.press(b),
-            Event::Button(b, false) => self.release(b),
+            Event::Button(b, down) => {
+                self.status.lock().unwrap().press(b, down);
+                if down { self.press(b) } else { self.release(b) }
+            }
+            Event::SetEnabled(on) => self.set_enabled(on, true),
+            Event::Quit => {}
         }
     }
 
@@ -166,6 +187,11 @@ impl Engine {
         if !self.enabled && *action != Action::Toggle {
             return;
         }
+        // Com a tela de ajustes aberta, os botões só aparecem nela (o
+        // clique segue valendo, para usar a própria tela).
+        if !matches!(action, Action::Click(_)) && self.status.lock().unwrap().learning() {
+            return;
+        }
         if *action != Action::None {
             eprintln!(
                 "[pad] {} → {action:?}",
@@ -175,16 +201,7 @@ impl Engine {
         let result = match action {
             Action::None => Ok(()),
             Action::Toggle => {
-                self.enabled = !self.enabled;
-                self.release_all_but_buttons();
-                let msg = if self.enabled {
-                    "pad ligado"
-                } else {
-                    "pad desligado"
-                };
-                eprintln!("[pad] {msg}");
-                notify(msg);
-                self.rumble(if self.enabled { 1 } else { 2 });
+                self.set_enabled(!self.enabled, true);
                 Ok(())
             }
             Action::Talk => {
@@ -225,6 +242,25 @@ impl Engine {
         };
         if let Err(e) = result {
             eprintln!("[pad] falhou: {e:#}");
+        }
+    }
+
+    /// Liga/desliga; `feedback`: avisa na tela e vibra.
+    fn set_enabled(&mut self, on: bool, feedback: bool) {
+        if on == self.enabled {
+            return;
+        }
+        self.enabled = on;
+        self.release_all_but_buttons();
+        self.status.lock().unwrap().enabled = on;
+        if let Some(t) = &self.tray {
+            t.update(|t| t.enabled = on);
+        }
+        let msg = if on { "pad ligado" } else { "pad desligado" };
+        eprintln!("[pad] {msg}");
+        if feedback {
+            notify(msg);
+            self.rumble(if on { 1 } else { 2 });
         }
     }
 

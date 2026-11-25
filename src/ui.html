@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pad · ajustes</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --line: #e2e5ea; --text: #1b1f24; --muted: #667085;
+  --accent: #3b6ef5; --accent-soft: #e6edff; --down: #22a06b; --down-soft: #dcf5e9; --warn: #c0392b;
+  --key: #f0f2f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111317; --panel: #191c21; --line: #2a2f37; --text: #e8eaee; --muted: #8b93a1;
+    --accent: #6b93ff; --accent-soft: #1e2a4a; --down: #3ccf8e; --down-soft: #173528; --warn: #ff6b5b;
+    --key: #23272e;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+.pill { padding: 3px 10px; border-radius: 999px; background: var(--key); color: var(--muted); font-size: 12px; }
+.pill.ok { background: var(--down-soft); color: var(--down); }
+.spacer { flex: 1; }
+label.chk { display: flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; user-select: none; }
+.switch { position: relative; width: 40px; height: 22px; border-radius: 999px; background: var(--line); border: 0; cursor: pointer; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch.on { background: var(--down); }
+.switch.on::after { transform: translateX(18px); }
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.banner { background: var(--warn); color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; white-space: pre-wrap; }
+.hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+
+/* o controle */
+.pad { display: grid; gap: 14px; }
+.row { display: flex; justify-content: space-between; gap: 10px; }
+.row .grp { display: flex; gap: 8px; }
+.body { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+.cross .btn { padding: 6px 4px; }
+.cross { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cross .c { visibility: hidden; }
+.mid { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.btn { border: 1px solid var(--line); background: var(--key); border-radius: 10px; padding: 7px 8px; min-width: 0; cursor: pointer; text-align: center; transition: background .08s, border-color .08s, transform .08s; color: inherit; font: inherit; }
+.btn b { display: block; font-size: 13px; }
+.btn small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.25; min-height: 2.5em; }
+.shoulder .btn small, .sticks .btn small, .mid .btn small { min-height: 0; -webkit-line-clamp: 1; line-clamp: 1; }
+.btn.none small { opacity: .55; }
+.btn.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.btn.down { background: var(--down-soft); border-color: var(--down); transform: scale(.97); }
+.btn.down small { color: var(--down); }
+.shoulder .btn { width: 120px; }
+.sticks { display: flex; justify-content: space-around; }
+.sticks .btn { width: 130px; border-radius: 999px; }
+
+/* editor */
+.field { display: grid; gap: 6px; margin-bottom: 12px; }
+.field > span { color: var(--muted); font-size: 12px; }
+select, input[type=text] { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+input.capture { cursor: pointer; }
+input.capture:focus { outline: 2px solid var(--accent); }
+.raw { font: 12px ui-monospace, monospace; color: var(--muted); background: var(--key); padding: 6px 8px; border-radius: 6px; word-break: break-all; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+button.primary, button.ghost { padding: 8px 14px; border-radius: 8px; font: inherit; cursor: pointer; border: 1px solid var(--line); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; color: var(--text); }
+button:disabled { opacity: .5; cursor: default; }
+.saved { color: var(--down); font-size: 12px; opacity: 0; transition: opacity .2s; }
+.saved.show { opacity: 1; }
+.err { color: var(--warn); font-size: 12px; }
+
+/* sliders */
+.slider { display: grid; grid-template-columns: 130px 1fr 56px; gap: 10px; align-items: center; margin-bottom: 8px; }
+.slider span:first-child { color: var(--muted); }
+.slider output { text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+
+/* combos */
+.combo { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.combo:first-of-type { border-top: 0; }
+.chip { background: var(--key); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+.combo .what { color: var(--muted); flex: 1; min-width: 120px; }
+.x { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; }
+.x:hover { color: var(--warn); }
+.rec { border: 1px dashed var(--accent); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.stack { display: grid; gap: 16px; }
+footer { margin-top: 20px; color: var(--muted); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+code { font: 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>pad</h1>
+    <span id="ctl" class="pill">procurando o controle…</span>
+    <span class="spacer"></span>
+    <label class="chk" title="Com esta tela em foco, os botões só aparecem aqui e não disparam nada (o clique segue valendo).">
+      <input type="checkbox" id="learn" checked> pausar os botões enquanto configuro
+    </label>
+    <label class="chk">ligado <button id="enabled" class="switch" aria-label="ligar/desligar"></button></label>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Controle</h2>
+      <p class="hint">Aperte um botão no controle (ou clique nele aqui) para escolher o que ele faz.</p>
+      <div class="pad" id="pad"></div>
+    </section>
+
+    <div class="stack">
+      <section class="card" id="editorCard">
+        <h2 id="edTitle">Botão</h2>
+        <div id="editor"></div>
+      </section>
+
+      <section class="card">
+        <h2>Combos</h2>
+        <p class="hint">Botões apertados juntos. Quem está num combo dispara a própria ação ao soltar.</p>
+        <div id="combos"></div>
+        <div id="rec" class="rec" hidden></div>
+        <div class="actions" style="margin-top:10px"><button class="ghost" id="newCombo">+ novo combo</button></div>
+      </section>
+
+      <section class="card">
+        <h2>Mouse e rolagem</h2>
+        <div id="sliders"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    <span>config: <code id="path"></code></span>
+    <span class="spacer"></span>
+    <button class="ghost" id="reset">restaurar o padrão</button>
+  </footer>
+</main>
+
+<script>
+const NAMES = { a: "A", b: "B", x: "X", y: "Y", l1: "L1", r1: "R1", l2: "L2", r2: "R2", l3: "L3", r3: "R3",
+  select: "Select", start: "Start", home: "Home", up: "↑", down: "↓", left: "←", right: "→" };
+const EXTRA_T3 = [
+  { command: "_enter", label: "Enviar (Enter)", keys: "enter" },
+  { command: "_esc", label: "Esc (fechar/cancelar)", keys: "esc" },
+];
+let S = null;            // /api/state
+let live = { pressed: [] };
+let selected = "l1";
+let recording = null;    // { seen: Set, captured: [] | null, action }
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function load() { S = await api("/api/state"); render(); }
+
+// ---- ações: texto <-> forma -------------------------------------------------
+function t3list() { return EXTRA_T3.concat(S ? S.t3 : []); }
+function parse(a) {
+  a = (a || "none").trim();
+  const sp = a.indexOf(" ");
+  const verb = (sp < 0 ? a : a.slice(0, sp)).toLowerCase();
+  const rest = sp < 0 ? "" : a.slice(sp + 1).trim();
+  if (verb === "t3") {
+    const c = t3list().find((c) => c.keys === rest);
+    return c ? { type: "t3cmd", arg: c.keys } : { type: "t3keys", arg: rest };
+  }
+  if (verb === "key") return { type: "keys", arg: rest };
+  if (["talk", "focus", "toggle", "none", "click", "scroll", "run"].includes(verb)) return { type: verb, arg: rest };
+  return { type: "none", arg: "" };
+}
+function build(f) {
+  switch (f.type) {
+    case "t3cmd": case "t3keys": return f.arg ? "t3 " + f.arg : null;
+    case "keys": return f.arg ? "key " + f.arg : null;
+    case "click": return "click " + (f.arg || "left");
+    case "scroll": return "scroll " + (f.arg || "down");
+    case "run": return f.arg ? "run " + f.arg : null;
+    default: return f.type;
+  }
+}
+function describe(a) {
+  const f = parse(a);
+  switch (f.type) {
+    case "talk": return "Ditar (talk)";
+    case "focus": return "Trazer o T3";
+    case "toggle": return "Liga/desliga";
+    case "none": return "—";
+    case "t3cmd": return t3list().find((c) => c.keys === f.arg).label;
+    case "t3keys": return "T3: " + f.arg;
+    case "keys": return "Tecla " + f.arg;
+    case "click": return { left: "Clique", right: "Clique direito", middle: "Clique do meio" }[f.arg || "left"] || "Clique";
+    case "scroll": return f.arg === "up" ? "Rolar para cima" : "Rolar para baixo";
+    case "run": return "Rodar: " + f.arg;
+  }
+  return a;
+}
+
+// ---- o controle -------------------------------------------------------------
+function btn(name, cls = "") {
+  const a = S ? S.buttons[name] : "none";
+  const none = parse(a).type === "none" ? " none" : "";
+  return `<button class="btn ${cls}${none}" data-b="${name}"><b>${NAMES[name]}</b><small>${esc(describe(a))}</small></button>`;
+}
+function renderPad() {
+  $("pad").innerHTML = `
+    <div class="row shoulder"><div class="grp">${btn("l2")}${btn("l1")}</div><div class="grp">${btn("r1")}${btn("r2")}</div></div>
+    <div class="body">
+      <div class="cross"><span class="c"></span>${btn("up")}<span class="c"></span>${btn("left")}<span class="c"></span>${btn("right")}<span class="c"></span>${btn("down")}<span class="c"></span></div>
+      <div class="mid">${btn("select")}${btn("home")}${btn("start")}</div>
+      <div class="cross"><span class="c"></span>${btn("y")}<span class="c"></span>${btn("x")}<span class="c"></span>${btn("b")}<span class="c"></span>${btn("a")}<span class="c"></span></div>
+    </div>
+    <div class="sticks">${btn("l3")}${btn("r3")}</div>`;
+  $("pad").querySelectorAll(".btn").forEach((el) => el.onclick = () => select(el.dataset.b));
+  paintPad();
+}
+function paintPad() {
+  $("pad").querySelectorAll(".btn").forEach((el) => {
+    el.classList.toggle("sel", el.dataset.b === selected);
+    el.classList.toggle("down", live.pressed.includes(el.dataset.b));
+  });
+}
+function select(b) { selected = b; paintPad(); renderEditor(); }
+
+// ---- editor de ação ---------------------------------------------------------
+const TYPES = [
+  ["talk", "Ditar (traz o T3 e dispara o talk)"],
+  ["t3cmd", "Comando do T3"],
+  ["focus", "Trazer o T3 para a frente"],
+  ["scroll", "Rolar"],
+  ["click", "Clique do mouse"],
+  ["t3keys", "Teclas no T3"],
+  ["keys", "Teclas (onde estiver o foco)"],
+  ["run", "Rodar um comando"],
+  ["toggle", "Ligar/desligar o pad"],
+  ["none", "Nada"],
+];
+function codeToKey(e) {
+  const c = e.code;
+  if (/^Key[A-Z]$/.test(c)) return c.slice(3).toLowerCase();
+  if (/^Digit\d$/.test(c)) return c.slice(5);
+  if (/^F\d+$/.test(c)) return c.toLowerCase();
+  const m = { BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Semicolon: ";", Quote: "'", Comma: ",", Period: ".",
+    Slash: "/", Backslash: "\\", Backquote: "`", Enter: "enter", NumpadEnter: "enter", Escape: "esc", Tab: "tab", Space: "space",
+    Backspace: "backspace", Delete: "delete", Insert: "insert", ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left",
+    ArrowRight: "right", Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown" };
+  return m[c] || null;
+}
+/** Desenha o editor de `action` dentro de `box`; `save(texto)` grava. */
+function editor(box, action, save) {
+  const f = parse(action);
+  const opts = TYPES.map(([v, l]) => `<option value="${v}" ${v === f.type ? "selected" : ""}>${l}</option>`).join("");
+  let extra = "";
+  if (f.type === "t3cmd") {
+    extra = `<label class="field"><span>Comando</span><select data-k="arg">${t3list().map((c) =>
+      `<option value="${esc(c.keys)}" ${c.keys === f.arg ? "selected" : ""}>${esc(c.label)} · ${esc(c.keys)}</option>`).join("")}</select></label>`;
+  } else if (f.type === "t3keys" || f.type === "keys") {
+    extra = `<label class="field"><span>Teclas: clique e aperte o atalho no teclado</span><input type="text" class="capture" data-k="arg" readonly value="${esc(f.arg)}" placeholder="clique e aperte as teclas"></label>`;
+  } else if (f.type === "click") {
+    extra = `<label class="field"><span>Botão do mouse</span><select data-k="arg">${[["left", "Esquerdo"], ["right", "Direito"], ["middle", "Do meio"]].map(([v, l]) =>
+      `<option value="${v}" ${(f.arg || "left") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+  } else if (f.type === "scroll") {
+    extra = `<label class="field"><span>Direção (segurando, continua)</span><select data-k="arg">${[["up", "Para cima"], ["down", "Para baixo"]].map(([v, l]) =>
+      `<option value="${v}" ${(f.arg || "down") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+  } else if (f.type === "run") {
+    extra = `<label class="field"><span>Comando (sh -c)</span><input type="text" data-k="arg" value="${esc(f.arg)}" placeholder="talk-rs hush"></label>`;
+  }
+  box.innerHTML = `<label class="field"><span>O que faz</span><select data-k="type">${opts}</select></label>${extra}
+    <div class="raw" title="como fica no config.toml">${esc(action || "none")}</div>
+    <div class="err"></div>`;
+  const err = box.querySelector(".err");
+  const commit = async (nf) => {
+    // Ao trocar o tipo, já escolhe algo que faça sentido.
+    if (nf.type === "t3cmd" && !t3list().some((c) => c.keys === nf.arg)) nf.arg = t3list()[0].keys;
+    const text = build(nf);
+    if (text === null) { editor(box, buildDraft(nf), save); return; }
+    const r = await save(text);
+    if (r && r.ok === false) err.textContent = r.error;
+  };
+  box.querySelector('[data-k="type"]').onchange = (e) => commit({ type: e.target.value, arg: "" });
+  const arg = box.querySelector('[data-k="arg"]');
+  if (!arg) return;
+  if (arg.classList.contains("capture")) {
+    arg.onkeydown = (e) => {
+      e.preventDefault();
+      const k = codeToKey(e);
+      if (!k) return;
+      const mods = [e.ctrlKey && "ctrl", e.shiftKey && "shift", e.altKey && "alt", e.metaKey && "super"].filter(Boolean);
+      arg.value = mods.concat(k).join("+");
+      commit({ type: f.type, arg: arg.value });
+    };
+  } else {
+    arg.onchange = () => commit({ type: f.type, arg: arg.value.trim() });
+  }
+}
+// Um tipo que ainda precisa de argumento: mostra o editor sem gravar.
+function buildDraft(f) { return f.type === "keys" ? "key " : f.type === "t3keys" ? "t3 " : f.type === "run" ? "run " : f.type; }
+
+function renderEditor() {
+  $("edTitle").textContent = "Botão " + NAMES[selected];
+  editor($("editor"), S.buttons[selected], async (text) => {
+    const r = await api("/api/edit", { op: "button", button: selected, action: text });
+    if (r.ok) await load();
+    return r;
+  });
+}
+
+// ---- combos -----------------------------------------------------------------
+function renderCombos() {
+  $("combos").innerHTML = S.combos.length ? S.combos.map((c, i) => `
+    <div class="combo">${c.buttons.map((b) => `<span class="chip">${NAMES[b] || b}</span>`).join("+")}
+      <span class="what">→ ${esc(describe(c.action))}</span>
+      <button class="x" title="apagar" data-i="${i}">×</button></div>`).join("") : `<p class="hint">Nenhum combo.</p>`;
+  $("combos").querySelectorAll(".x").forEach((el) => el.onclick = async () => {
+    const c = S.combos[+el.dataset.i];
+    if (!confirm(`Apagar o combo ${c.buttons.map((b) => NAMES[b]).join("+")}?`)) return;
+    await api("/api/edit", { op: "remove_combo", action: c.action });
+    load();
+  });
+}
+function renderRec() {
+  const box = $("rec");
+  if (!recording) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!recording.captured) {
+    const now = [...recording.seen].map((b) => NAMES[b]).join(" + ");
+    box.innerHTML = `<b>Aperte os botões juntos no controle…</b><p class="hint" style="margin:6px 0 0">${now || "esperando"}</p>
+      <div class="actions" style="margin-top:8px"><button class="ghost" id="recCancel">cancelar</button></div>`;
+  } else {
+    box.innerHTML = `<div style="margin-bottom:10px">${recording.captured.map((b) => `<span class="chip">${NAMES[b]}</span>`).join("+")}</div>
+      <div id="recEd"></div><div class="actions"><button class="primary" id="recSave">salvar combo</button><button class="ghost" id="recCancel">cancelar</button></div>
+      <div class="err" id="recErr"></div>`;
+    editor($("recEd"), recording.action, async (text) => { recording.action = text; renderRec(); return { ok: true }; });
+    $("recSave").onclick = async () => {
+      const r = await api("/api/edit", { op: "combo", action: recording.action, buttons: recording.captured });
+      if (!r.ok) { $("recErr").textContent = r.error; return; }
+      recording = null; renderRec(); load();
+    };
+  }
+  $("recCancel").onclick = () => { recording = null; renderRec(); };
+}
+$("newCombo").onclick = () => { recording = { seen: new Set(), captured: null, action: "t3 ctrl+n" }; renderRec(); };
+
+// ---- sliders ----------------------------------------------------------------
+const SLIDERS = [
+  ["mouse", "speed", "Velocidade", 300, 4000, 50],
+  ["mouse", "curve", "Curva (precisão)", 1, 4, 0.1],
+  ["mouse", "deadzone", "Zona morta", 0.05, 0.4, 0.01],
+  ["scroll", "speed", "Rolagem (linhas/s)", 5, 80, 1],
+];
+function renderSliders() {
+  $("sliders").innerHTML = SLIDERS.map(([s, k, l, min, max, step]) => `
+    <label class="slider"><span>${l}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${S[s][k]}" data-s="${s}" data-k="${k}"><output>${S[s][k]}</output></label>`).join("");
+  $("sliders").querySelectorAll("input").forEach((el) => {
+    el.oninput = () => el.nextElementSibling.textContent = el.value;
+    el.onchange = () => api("/api/edit", { op: "number", section: el.dataset.s, key: el.dataset.k, value: +el.value });
+  });
+}
+
+function render() {
+  $("banner").hidden = !S.error;
+  $("banner").textContent = S.error ? "O config.toml tem um erro (o pad segue com o último que valia):\n" + S.error : "";
+  $("path").textContent = S.path;
+  renderPad(); renderEditor(); renderCombos(); renderSliders();
+}
+
+// ---- ao vivo ----------------------------------------------------------------
+async function tick() {
+  try {
+    const learn = $("learn").checked && document.visibilityState === "visible" && document.hasFocus();
+    const prev = live.pressed;
+    live = await api("/api/live?learn=" + (learn ? 1 : 0));
+    $("ctl").textContent = live.controller || "sem controle";
+    $("ctl").classList.toggle("ok", !!live.controller);
+    $("enabled").classList.toggle("on", live.enabled);
+    if (recording && !recording.captured) {
+      live.pressed.forEach((b) => recording.seen.add(b));
+      if (live.pressed.length === 0 && recording.seen.size > 0) {
+        if (recording.seen.size >= 2) recording.captured = [...recording.seen];
+        else recording.seen.clear();
+      }
+      renderRec();
+    } else if (learn) {
+      const fresh = live.pressed.find((b) => !prev.includes(b));
+      if (fresh && fresh !== selected) select(fresh);
+    }
+    paintPad();
+  } catch (e) {
+    $("ctl").textContent = "o pad não responde";
+    $("ctl").classList.remove("ok");
+  }
+  setTimeout(tick, 90);
+}
+$("enabled").onclick = () => api("/api/enabled", !live.enabled);
+$("reset").onclick = async () => {
+  if (!confirm("Voltar tudo para o padrão de fábrica?")) return;
+  await api("/api/edit", { op: "reset" });
+  load();
+};
+load().then(tick);
+</script>
+</body>
+</html>

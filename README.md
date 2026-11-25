@@ -11,8 +11,19 @@ remoto do T3 Code, no Linux com COSMIC. Leve: uma thread lendo o controle,
 - **Os dois analógicos**: mouse.
 - **Start + Select + L1 + L2**: liga/desliga o pad (vibra 1x ligado, 2x desligado).
 
-Tudo muda em `~/.config/pad/config.toml` (criado na primeira vez, com um
-comentário em cada chave). Salvou, valeu: o pad relê sozinho.
+## Ajustes
+
+Clique no ícone do controle na bandeja (ou rode `pad ui`): abre
+<http://127.0.0.1:7477>. Aperte um botão no controle e ele fica marcado; escolha
+o que ele faz (os comandos do T3 vêm com nome, lidos dos atalhos do próprio T3).
+Também dá para gravar combos apertando os botões juntos e ajustar o mouse.
+Com a tela em foco, os botões só aparecem nela e não disparam nada.
+
+![A tela de ajustes](docs/ajustes.png)
+
+Tudo fica em `~/.config/pad/config.toml` (criado na primeira vez, com um
+comentário em cada chave), que também dá para editar à mão. Salvou, valeu: o
+pad relê sozinho. A tela grava sem apagar os comentários.
 
 ## Instalar
 

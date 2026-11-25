@@ -34,6 +34,9 @@ pub enum Event {
     Button(Button, bool),
     /// -1 a 1; y positivo é para baixo.
     Axis(Axis, f64),
+    /// Da bandeja ou da tela de ajustes.
+    SetEnabled(bool),
+    Quit,
 }
 
 /// Para normalizar um eixo: o centro e meia volta.

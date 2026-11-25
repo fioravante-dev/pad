@@ -13,6 +13,9 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 cosmic-protocols = { version = "0.2", default-features = false, features = ["client"] }
 wayland-client = "0.31"
+ksni = { version = "0.3", features = ["blocking"] }
+serde_json = "1"
+toml_edit = "0.22"
 
 [profile.release]
 opt-level = 3

@@ -8,7 +8,10 @@ mod config;
 mod engine;
 mod gamepad;
 mod out;
+mod status;
 mod t3;
+mod tray;
+mod ui;
 
 use std::os::linux::net::SocketAddrExt;
 use std::os::unix::net::{SocketAddr, UnixListener};
@@ -19,6 +22,7 @@ use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::engine::Engine;
+use crate::tray::TrayMethods as _;
 
 fn main() {
     if let Err(e) = run() {
@@ -36,12 +40,16 @@ fn run() -> Result<()> {
             println!("{}: ok", path.display());
             return Ok(());
         }
+        Some("ui") => {
+            ui::open();
+            return Ok(());
+        }
         Some("default-config") => {
             print!("{}", config::DEFAULT);
             return Ok(());
         }
         Some(other) => {
-            eprintln!("uso: pad [run | check | default-config]   (não conheço {other:?})");
+            eprintln!("uso: pad [run | ui | check | default-config]   (não conheço {other:?})");
             std::process::exit(2);
         }
     }
@@ -64,9 +72,23 @@ fn run() -> Result<()> {
         }
     };
     let (tx, rx) = mpsc::channel();
-    gamepad::spawn(cfg.device.clone(), tx);
+    gamepad::spawn(cfg.device.clone(), tx.clone());
+    let status = status::Shared::default();
+    ui::spawn(path.clone(), status.clone(), tx.clone());
+    let tray = match (tray::Tray {
+        enabled: cfg.enabled,
+        tx: tx.clone(),
+    })
+    .spawn()
+    {
+        Ok(h) => Some(h),
+        Err(e) => {
+            eprintln!("[pad] sem ícone na bandeja: {e}");
+            None
+        }
+    };
 
-    let mut engine = Engine::new(cfg, out, t3);
+    let mut engine = Engine::new(cfg, out, t3, status, tray);
     let mut mtime = modified(&path);
     let mut last_check = Instant::now();
     let mut last_tick = Instant::now();
@@ -77,6 +99,10 @@ fn run() -> Result<()> {
             Duration::from_millis(500)
         };
         match rx.recv_timeout(wait) {
+            Ok(gamepad::Event::Quit) => {
+                eprintln!("[pad] saindo");
+                return Ok(());
+            }
             Ok(ev) => engine.event(ev),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
