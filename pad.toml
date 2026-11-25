@@ -1,0 +1,69 @@
+# pad: o controle como controle remoto do T3 Code.
+# Salvou, valeu: o pad relê este arquivo sozinho (em até 1 s).
+#
+# Ações (o texto de cada botão):
+#   "talk"            traz o T3 para a frente e dispara o ditado ([talk].command)
+#   "focus"           só traz o T3 para a frente (mesmo minimizado)
+#   "t3 <teclas>"     traz o T3 para a frente e aperta as teclas
+#   "key <teclas>"    aperta as teclas onde o foco estiver
+#   "click left"      clique do mouse (left, right, middle)
+#   "run <comando>"   roda um comando (sh -c)
+#   "toggle"          liga/desliga o pad
+#   "none"            nada
+#
+# Teclas: "ctrl+shift+[", "enter", "esc", "tab", "up", "f5", "a"...
+# ou qualquer nome do kernel, como "KEY_RIGHTBRACE". As teclas são as
+# posições do teclado US: "[" é a tecla à direita do P.
+#
+# Botões: a b x y l1 r1 l2 r2 l3 r3 select start home up down left right
+# (a, b, x, y pela posição Xbox: a embaixo, b à direita.)
+
+# Liga já ligado? O combo [combos].toggle liga e desliga.
+enabled = true
+
+# Pedaço do nome do controle a usar; vazio = o primeiro controle que achar.
+device = ""
+
+[talk]
+command = "/home/dev/.local/bin/talk-rs toggle -l auto"
+
+[mouse]
+# Os dois analógicos movem o mouse.
+sticks = ["left", "right"]
+# Pixels por segundo com o analógico no fim.
+speed = 1500.0
+# Zona morta (0 a 1): o quanto o analógico mexe antes de valer.
+deadzone = 0.15
+# Curva: 1 = linear; maior = mais preciso devagar, rápido no fim.
+curve = 2.2
+
+[scroll]
+# Os dois analógicos juntos para baixo (ou para cima) rolam a tela.
+enabled = true
+# Linhas por segundo com os dois no fim.
+speed = 25.0
+
+[buttons]
+l1 = "talk"
+r1 = "talk"
+l2 = "t3 enter"
+r2 = "t3 enter"
+up = "t3 ctrl+shift+["     # conversa anterior
+down = "t3 ctrl+shift+]"   # próxima conversa
+left = "t3 ctrl+["         # voltar
+right = "t3 ctrl+]"        # avançar
+l3 = "click left"
+r3 = "click left"
+a = "click left"
+b = "click right"
+x = "none"
+y = "none"
+select = "key esc"
+start = "key tab"
+home = "focus"
+
+[combos]
+# ação = botões apertados juntos (em qualquer ordem). Os botões que estão em
+# algum combo disparam a própria ação ao soltar, e só se o combo não
+# aconteceu. Exemplo: "t3 ctrl+n" = ["l1", "r1"]   (nova conversa)
+toggle = ["start", "select", "l1", "l2"]

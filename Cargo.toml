@@ -1,0 +1,22 @@
+[package]
+name = "pad"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+description = "O controle como controle remoto do T3 Code (Linux/COSMIC)"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+evdev = "0.13"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+cosmic-protocols = { version = "0.2", default-features = false, features = ["client"] }
+wayland-client = "0.31"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

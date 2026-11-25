@@ -1,0 +1,341 @@
+//! O coração: botão apertado → ação; analógicos → mouse e rolagem; combos.
+//!
+//! Regras dos botões:
+//! - fora de combos, a ação dispara ao apertar (o clique segura enquanto o
+//!   botão está apertado, para arrastar);
+//! - em algum combo, dispara ao soltar, e só se nenhum combo aconteceu
+//!   enquanto ele estava apertado. Assim Start+Select+L1+L2 não dita nem
+//!   aperta Enter no caminho.
+
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
+
+use evdev::{Device, FFEffectData, FFEffectKind, FFReplay, FFTrigger};
+
+use crate::config::{Action, Button, Click, Config};
+use crate::gamepad::{Axis, Event};
+use crate::out::Out;
+use crate::t3::T3;
+
+pub struct Engine {
+    cfg: Config,
+    out: Out,
+    t3: Option<T3>,
+    enabled: bool,
+    pressed: HashSet<Button>,
+    /// Botões que já serviram a um combo (não disparam ao soltar).
+    used: HashSet<Button>,
+    /// Combos (pelo índice) que estão apertados agora.
+    active_combos: HashSet<usize>,
+    /// Cliques segurados por botão.
+    held_clicks: Vec<(Button, Click)>,
+    /// lx, ly, rx, ry.
+    axes: [f64; 4],
+    device: Option<PathBuf>,
+}
+
+impl Engine {
+    pub fn new(cfg: Config, out: Out, t3: Option<T3>) -> Engine {
+        Engine {
+            enabled: cfg.enabled,
+            cfg,
+            out,
+            t3,
+            pressed: HashSet::new(),
+            used: HashSet::new(),
+            active_combos: HashSet::new(),
+            held_clicks: Vec::new(),
+            axes: [0.0; 4],
+            device: None,
+        }
+    }
+
+    pub fn set_config(&mut self, cfg: Config) {
+        if cfg.enabled != self.cfg.enabled {
+            self.enabled = cfg.enabled;
+        }
+        self.cfg = cfg;
+        self.active_combos.clear();
+    }
+
+    pub fn event(&mut self, ev: Event) {
+        match ev {
+            Event::Connected { name, path } => {
+                eprintln!("[pad] controle: {name} ({})", path.display());
+                self.device = Some(path);
+                if self.enabled {
+                    self.rumble(1);
+                }
+            }
+            Event::Disconnected => {
+                self.device = None;
+                self.release_all();
+            }
+            Event::Axis(a, v) => {
+                let i = match a {
+                    Axis::LeftX => 0,
+                    Axis::LeftY => 1,
+                    Axis::RightX => 2,
+                    Axis::RightY => 3,
+                };
+                self.axes[i] = v;
+            }
+            Event::Button(b, true) => self.press(b),
+            Event::Button(b, false) => self.release(b),
+        }
+    }
+
+    fn press(&mut self, b: Button) {
+        if !self.pressed.insert(b) {
+            return;
+        }
+        // Combos: o primeiro (maior) que fechou agora.
+        let hit = self.cfg.combos.iter().enumerate().find(|(i, c)| {
+            !self.active_combos.contains(i) && c.buttons.contains(&b) && c.buttons.iter().all(|x| self.pressed.contains(x))
+        });
+        if let Some((i, combo)) = hit {
+            let (buttons, action) = (combo.buttons.clone(), combo.action.clone());
+            self.active_combos.insert(i);
+            self.used.extend(buttons.iter().copied());
+            // Um clique segurado por um botão do combo é solto.
+            for x in &buttons {
+                self.release_click(*x);
+            }
+            eprintln!("[pad] combo: {:?}", buttons.iter().map(|x| x.name()).collect::<Vec<_>>());
+            self.run(&action, None);
+            return;
+        }
+        if self.cfg.in_combo(b) {
+            return;
+        }
+        let action = self.cfg.action(b).clone();
+        self.run(&action, Some(b));
+    }
+
+    fn release(&mut self, b: Button) {
+        if !self.pressed.remove(&b) {
+            return;
+        }
+        let combos = &self.cfg.combos;
+        self.active_combos.retain(|&i| !combos.get(i).is_some_and(|c| c.buttons.contains(&b)));
+        self.release_click(b);
+        let was_used = self.used.remove(&b);
+        if self.cfg.in_combo(b) && !was_used {
+            let action = self.cfg.action(b).clone();
+            match action {
+                // Ao soltar, o clique é um toque.
+                Action::Click(c) if self.enabled => {
+                    let _ = self.out.click(c, true);
+                    let _ = self.out.click(c, false);
+                }
+                other => self.run(&other, None),
+            }
+        }
+    }
+
+    fn release_click(&mut self, b: Button) {
+        if let Some(pos) = self.held_clicks.iter().position(|(x, _)| *x == b) {
+            let (_, c) = self.held_clicks.remove(pos);
+            let _ = self.out.click(c, false);
+        }
+    }
+
+    fn release_all(&mut self) {
+        for (_, c) in std::mem::take(&mut self.held_clicks) {
+            let _ = self.out.click(c, false);
+        }
+        self.pressed.clear();
+        self.used.clear();
+        self.active_combos.clear();
+        self.axes = [0.0; 4];
+        self.out.reset_motion();
+    }
+
+    /// `holder`: o botão que segura a ação (para o clique soltar junto).
+    fn run(&mut self, action: &Action, holder: Option<Button>) {
+        if !self.enabled && *action != Action::Toggle {
+            return;
+        }
+        if *action != Action::None {
+            eprintln!("[pad] {} → {action:?}", holder.map_or("combo/soltar", |b| b.name()));
+        }
+        let result = match action {
+            Action::None => Ok(()),
+            Action::Toggle => {
+                self.enabled = !self.enabled;
+                self.release_all_but_buttons();
+                let msg = if self.enabled { "pad ligado" } else { "pad desligado" };
+                eprintln!("[pad] {msg}");
+                notify(msg);
+                self.rumble(if self.enabled { 1 } else { 2 });
+                Ok(())
+            }
+            Action::Talk => {
+                self.bring_t3();
+                spawn(&self.cfg.talk_command);
+                Ok(())
+            }
+            Action::Focus => {
+                self.bring_t3();
+                Ok(())
+            }
+            Action::Keys(keys, t3) => {
+                if *t3 {
+                    self.bring_t3();
+                }
+                self.out.keys(keys)
+            }
+            Action::Click(c) => match holder {
+                Some(b) => {
+                    self.held_clicks.push((b, *c));
+                    self.out.click(*c, true)
+                }
+                None => self.out.click(*c, true).and_then(|_| self.out.click(*c, false)),
+            },
+            Action::Run(cmd) => {
+                spawn(cmd);
+                Ok(())
+            }
+        };
+        if let Err(e) = result {
+            eprintln!("[pad] falhou: {e:#}");
+        }
+    }
+
+    /// Ao desligar, solta cliques e zera o movimento (os botões seguem
+    /// contados, para o combo de religar funcionar).
+    fn release_all_but_buttons(&mut self) {
+        for (_, c) in std::mem::take(&mut self.held_clicks) {
+            let _ = self.out.click(c, false);
+        }
+        self.out.reset_motion();
+    }
+
+    fn bring_t3(&mut self) {
+        let Some(t3) = &self.t3 else { return };
+        if t3.is_focused() {
+            return;
+        }
+        match t3.focus() {
+            // O COSMIC leva um instante para dar o foco ao T3.
+            Ok(true) => thread::sleep(Duration::from_millis(150)),
+            Ok(false) => eprintln!("[pad] o T3 não está aberto"),
+            Err(e) => eprintln!("[pad] não trouxe o T3: {e:#}"),
+        }
+    }
+
+    /// Algum analógico fora da zona morta (o laço anda mais rápido).
+    pub fn moving(&self) -> bool {
+        let dz = self.cfg.mouse.deadzone;
+        self.enabled && (stick(self.axes[0], self.axes[1], dz, 1.0).is_some() || stick(self.axes[2], self.axes[3], dz, 1.0).is_some())
+    }
+
+    /// Um passo do mouse / da rolagem; `dt` em segundos.
+    pub fn tick(&mut self, dt: f64) {
+        if !self.enabled {
+            return;
+        }
+        let m = &self.cfg.mouse;
+        let (lx, ly, rx, ry) = (self.axes[0], self.axes[1], self.axes[2], self.axes[3]);
+        // Rolagem: os dois analógicos juntos, para cima ou para baixo.
+        if self.cfg.scroll.enabled {
+            let vertical = |x: f64, y: f64| y.abs() > 0.5 && x.abs() < 0.5;
+            if vertical(lx, ly) && vertical(rx, ry) && ly.signum() == ry.signum() {
+                let mag = ((ly.abs() + ry.abs()) / 2.0 - 0.5) / 0.5;
+                let lines = -ly.signum() * self.cfg.scroll.speed * mag.clamp(0.1, 1.0) * dt;
+                if let Err(e) = self.out.scroll(lines) {
+                    eprintln!("[pad] rolagem falhou: {e:#}");
+                }
+                return;
+            }
+        }
+        let mut dx = 0.0;
+        let mut dy = 0.0;
+        for (on, x, y) in [(self.cfg.left_stick_mouse, lx, ly), (self.cfg.right_stick_mouse, rx, ry)] {
+            if let (true, Some((vx, vy))) = (on, stick(x, y, m.deadzone, m.curve)) {
+                dx += vx;
+                dy += vy;
+            }
+        }
+        if (dx != 0.0 || dy != 0.0)
+            && let Err(e) = self.out.mouse_move(dx * m.speed * dt, dy * m.speed * dt)
+        {
+            eprintln!("[pad] mouse falhou: {e:#}");
+        }
+    }
+
+    /// Tremidinha no controle: 1 = ligado, 2 = desligado.
+    fn rumble(&self, times: u32) {
+        let Some(path) = self.device.clone() else { return };
+        thread::spawn(move || {
+            let go = || -> std::io::Result<()> {
+                let mut dev = Device::open(&path)?;
+                let mut fx = dev.upload_ff_effect(FFEffectData {
+                    direction: 0,
+                    trigger: FFTrigger::default(),
+                    replay: FFReplay { length: 120, delay: 0 },
+                    kind: FFEffectKind::Rumble { strong_magnitude: 0x6000, weak_magnitude: 0xa000 },
+                })?;
+                for _ in 0..times {
+                    fx.play(1)?;
+                    thread::sleep(Duration::from_millis(250));
+                }
+                Ok(())
+            };
+            if let Err(e) = go() {
+                eprintln!("[pad] sem vibrar: {e}");
+            }
+        });
+    }
+}
+
+/// Analógico com zona morta radial e curva: (x, y) de -1 a 1, ou `None` parado.
+fn stick(x: f64, y: f64, deadzone: f64, curve: f64) -> Option<(f64, f64)> {
+    let mag = x.hypot(y);
+    if mag <= deadzone {
+        return None;
+    }
+    let scaled = ((mag - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0).powf(curve);
+    Some((x / mag * scaled, y / mag * scaled))
+}
+
+/// Roda um comando sem esperar (e sem deixar zumbi).
+fn spawn(cmd: &str) {
+    match Command::new("sh").arg("-c").arg(cmd).stdin(Stdio::null()).spawn() {
+        Ok(mut child) => {
+            thread::spawn(move || child.wait());
+        }
+        Err(e) => eprintln!("[pad] não rodou {cmd:?}: {e}"),
+    }
+}
+
+/// Aviso na tela (notificação do COSMIC).
+pub fn notify(msg: &str) {
+    spawn(&format!("notify-send -a pad -t 2500 'pad' {}", shell_quote(msg)));
+}
+
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deadzone_and_curve() {
+        assert!(stick(0.1, 0.0, 0.15, 2.0).is_none());
+        let (x, y) = stick(1.0, 0.0, 0.15, 2.0).unwrap();
+        assert!((x - 1.0).abs() < 1e-9 && y == 0.0);
+        let (x, _) = stick(0.5, 0.0, 0.15, 2.0).unwrap();
+        assert!(x > 0.0 && x < 0.5);
+    }
+
+    #[test]
+    fn quote() {
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    }
+}
