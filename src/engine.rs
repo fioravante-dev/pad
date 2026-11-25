@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use evdev::{Device, FFEffectData, FFEffectKind, FFReplay, FFTrigger};
 
@@ -32,6 +32,8 @@ pub struct Engine {
     active_combos: HashSet<usize>,
     /// Cliques segurados por botão.
     held_clicks: Vec<(Button, Click)>,
+    /// Rolagens seguradas: botão, direção (+1 cima), desde quando.
+    held_scrolls: Vec<(Button, i8, Instant)>,
     /// lx, ly, rx, ry.
     axes: [f64; 4],
     device: Option<PathBuf>,
@@ -48,6 +50,7 @@ impl Engine {
             used: HashSet::new(),
             active_combos: HashSet::new(),
             held_clicks: Vec::new(),
+            held_scrolls: Vec::new(),
             axes: [0.0; 4],
             device: None,
         }
@@ -94,7 +97,9 @@ impl Engine {
         }
         // Combos: o primeiro (maior) que fechou agora.
         let hit = self.cfg.combos.iter().enumerate().find(|(i, c)| {
-            !self.active_combos.contains(i) && c.buttons.contains(&b) && c.buttons.iter().all(|x| self.pressed.contains(x))
+            !self.active_combos.contains(i)
+                && c.buttons.contains(&b)
+                && c.buttons.iter().all(|x| self.pressed.contains(x))
         });
         if let Some((i, combo)) = hit {
             let (buttons, action) = (combo.buttons.clone(), combo.action.clone());
@@ -104,7 +109,10 @@ impl Engine {
             for x in &buttons {
                 self.release_click(*x);
             }
-            eprintln!("[pad] combo: {:?}", buttons.iter().map(|x| x.name()).collect::<Vec<_>>());
+            eprintln!(
+                "[pad] combo: {:?}",
+                buttons.iter().map(|x| x.name()).collect::<Vec<_>>()
+            );
             self.run(&action, None);
             return;
         }
@@ -120,8 +128,10 @@ impl Engine {
             return;
         }
         let combos = &self.cfg.combos;
-        self.active_combos.retain(|&i| !combos.get(i).is_some_and(|c| c.buttons.contains(&b)));
+        self.active_combos
+            .retain(|&i| !combos.get(i).is_some_and(|c| c.buttons.contains(&b)));
         self.release_click(b);
+        self.held_scrolls.retain(|(x, _, _)| *x != b);
         let was_used = self.used.remove(&b);
         if self.cfg.in_combo(b) && !was_used {
             let action = self.cfg.action(b).clone();
@@ -144,14 +154,11 @@ impl Engine {
     }
 
     fn release_all(&mut self) {
-        for (_, c) in std::mem::take(&mut self.held_clicks) {
-            let _ = self.out.click(c, false);
-        }
+        self.release_all_but_buttons();
         self.pressed.clear();
         self.used.clear();
         self.active_combos.clear();
         self.axes = [0.0; 4];
-        self.out.reset_motion();
     }
 
     /// `holder`: o botão que segura a ação (para o clique soltar junto).
@@ -160,14 +167,21 @@ impl Engine {
             return;
         }
         if *action != Action::None {
-            eprintln!("[pad] {} → {action:?}", holder.map_or("combo/soltar", |b| b.name()));
+            eprintln!(
+                "[pad] {} → {action:?}",
+                holder.map_or("combo/soltar", |b| b.name())
+            );
         }
         let result = match action {
             Action::None => Ok(()),
             Action::Toggle => {
                 self.enabled = !self.enabled;
                 self.release_all_but_buttons();
-                let msg = if self.enabled { "pad ligado" } else { "pad desligado" };
+                let msg = if self.enabled {
+                    "pad ligado"
+                } else {
+                    "pad desligado"
+                };
                 eprintln!("[pad] {msg}");
                 notify(msg);
                 self.rumble(if self.enabled { 1 } else { 2 });
@@ -193,8 +207,17 @@ impl Engine {
                     self.held_clicks.push((b, *c));
                     self.out.click(*c, true)
                 }
-                None => self.out.click(*c, true).and_then(|_| self.out.click(*c, false)),
+                None => self
+                    .out
+                    .click(*c, true)
+                    .and_then(|_| self.out.click(*c, false)),
             },
+            Action::Scroll(dir) => {
+                if let Some(b) = holder {
+                    self.held_scrolls.push((b, *dir, Instant::now()));
+                }
+                self.out.scroll(f64::from(*dir) * SCROLL_STEP)
+            }
             Action::Run(cmd) => {
                 spawn(cmd);
                 Ok(())
@@ -211,6 +234,7 @@ impl Engine {
         for (_, c) in std::mem::take(&mut self.held_clicks) {
             let _ = self.out.click(c, false);
         }
+        self.held_scrolls.clear();
         self.out.reset_motion();
     }
 
@@ -230,13 +254,28 @@ impl Engine {
     /// Algum analógico fora da zona morta (o laço anda mais rápido).
     pub fn moving(&self) -> bool {
         let dz = self.cfg.mouse.deadzone;
-        self.enabled && (stick(self.axes[0], self.axes[1], dz, 1.0).is_some() || stick(self.axes[2], self.axes[3], dz, 1.0).is_some())
+        self.enabled
+            && (!self.held_scrolls.is_empty()
+                || stick(self.axes[0], self.axes[1], dz, 1.0).is_some()
+                || stick(self.axes[2], self.axes[3], dz, 1.0).is_some())
     }
 
     /// Um passo do mouse / da rolagem; `dt` em segundos.
     pub fn tick(&mut self, dt: f64) {
         if !self.enabled {
             return;
+        }
+        // Rolagem segurada: depois de um instante, rola contínuo.
+        let held: f64 = self
+            .held_scrolls
+            .iter()
+            .filter(|(_, _, since)| since.elapsed() >= SCROLL_HOLD)
+            .map(|(_, dir, _)| f64::from(*dir))
+            .sum();
+        if held != 0.0
+            && let Err(e) = self.out.scroll(held * self.cfg.scroll.speed * dt)
+        {
+            eprintln!("[pad] rolagem falhou: {e:#}");
         }
         let m = &self.cfg.mouse;
         let (lx, ly, rx, ry) = (self.axes[0], self.axes[1], self.axes[2], self.axes[3]);
@@ -254,7 +293,10 @@ impl Engine {
         }
         let mut dx = 0.0;
         let mut dy = 0.0;
-        for (on, x, y) in [(self.cfg.left_stick_mouse, lx, ly), (self.cfg.right_stick_mouse, rx, ry)] {
+        for (on, x, y) in [
+            (self.cfg.left_stick_mouse, lx, ly),
+            (self.cfg.right_stick_mouse, rx, ry),
+        ] {
             if let (true, Some((vx, vy))) = (on, stick(x, y, m.deadzone, m.curve)) {
                 dx += vx;
                 dy += vy;
@@ -269,15 +311,23 @@ impl Engine {
 
     /// Tremidinha no controle: 1 = ligado, 2 = desligado.
     fn rumble(&self, times: u32) {
-        let Some(path) = self.device.clone() else { return };
+        let Some(path) = self.device.clone() else {
+            return;
+        };
         thread::spawn(move || {
             let go = || -> std::io::Result<()> {
                 let mut dev = Device::open(&path)?;
                 let mut fx = dev.upload_ff_effect(FFEffectData {
                     direction: 0,
                     trigger: FFTrigger::default(),
-                    replay: FFReplay { length: 120, delay: 0 },
-                    kind: FFEffectKind::Rumble { strong_magnitude: 0x6000, weak_magnitude: 0xa000 },
+                    replay: FFReplay {
+                        length: 120,
+                        delay: 0,
+                    },
+                    kind: FFEffectKind::Rumble {
+                        strong_magnitude: 0x6000,
+                        weak_magnitude: 0xa000,
+                    },
                 })?;
                 for _ in 0..times {
                     fx.play(1)?;
@@ -292,19 +342,31 @@ impl Engine {
     }
 }
 
+/// Linhas de um toque em "scroll".
+const SCROLL_STEP: f64 = 3.0;
+/// Segurando "scroll" por isto, rola contínuo.
+const SCROLL_HOLD: Duration = Duration::from_millis(300);
+
 /// Analógico com zona morta radial e curva: (x, y) de -1 a 1, ou `None` parado.
 fn stick(x: f64, y: f64, deadzone: f64, curve: f64) -> Option<(f64, f64)> {
     let mag = x.hypot(y);
     if mag <= deadzone {
         return None;
     }
-    let scaled = ((mag - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0).powf(curve);
+    let scaled = ((mag - deadzone) / (1.0 - deadzone))
+        .clamp(0.0, 1.0)
+        .powf(curve);
     Some((x / mag * scaled, y / mag * scaled))
 }
 
 /// Roda um comando sem esperar (e sem deixar zumbi).
 fn spawn(cmd: &str) {
-    match Command::new("sh").arg("-c").arg(cmd).stdin(Stdio::null()).spawn() {
+    match Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .stdin(Stdio::null())
+        .spawn()
+    {
         Ok(mut child) => {
             thread::spawn(move || child.wait());
         }
@@ -314,7 +376,10 @@ fn spawn(cmd: &str) {
 
 /// Aviso na tela (notificação do COSMIC).
 pub fn notify(msg: &str) {
-    spawn(&format!("notify-send -a pad -t 2500 'pad' {}", shell_quote(msg)));
+    spawn(&format!(
+        "notify-send -a pad -t 2500 'pad' {}",
+        shell_quote(msg)
+    ));
 }
 
 fn shell_quote(s: &str) -> String {

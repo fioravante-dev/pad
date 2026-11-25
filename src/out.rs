@@ -53,7 +53,13 @@ impl Out {
             .build()?;
         // O compositor leva um instante para adotar aparelhos novos.
         thread::sleep(Duration::from_millis(200));
-        Ok(Out { keyboard, mouse, rest_x: 0.0, rest_y: 0.0, rest_wheel: 0.0 })
+        Ok(Out {
+            keyboard,
+            mouse,
+            rest_x: 0.0,
+            rest_y: 0.0,
+            rest_wheel: 0.0,
+        })
     }
 
     fn key_ev(k: KeyCode, down: bool) -> InputEvent {
@@ -91,10 +97,18 @@ impl Out {
         self.rest_y -= y;
         let mut evs = Vec::with_capacity(2);
         if x != 0.0 {
-            evs.push(InputEvent::new(EventType::RELATIVE.0, Rel::REL_X.0, x as i32));
+            evs.push(InputEvent::new(
+                EventType::RELATIVE.0,
+                Rel::REL_X.0,
+                x as i32,
+            ));
         }
         if y != 0.0 {
-            evs.push(InputEvent::new(EventType::RELATIVE.0, Rel::REL_Y.0, y as i32));
+            evs.push(InputEvent::new(
+                EventType::RELATIVE.0,
+                Rel::REL_Y.0,
+                y as i32,
+            ));
         }
         if !evs.is_empty() {
             self.mouse.emit(&evs)?;
@@ -111,10 +125,18 @@ impl Out {
         }
         self.rest_wheel += hi;
         let after = (self.rest_wheel / WHEEL_HI).trunc();
-        let mut evs = vec![InputEvent::new(EventType::RELATIVE.0, Rel::REL_WHEEL_HI_RES.0, hi as i32)];
+        let mut evs = vec![InputEvent::new(
+            EventType::RELATIVE.0,
+            Rel::REL_WHEEL_HI_RES.0,
+            hi as i32,
+        )];
         let whole = (after - before) as i32;
         if whole != 0 {
-            evs.push(InputEvent::new(EventType::RELATIVE.0, Rel::REL_WHEEL.0, whole));
+            evs.push(InputEvent::new(
+                EventType::RELATIVE.0,
+                Rel::REL_WHEEL.0,
+                whole,
+            ));
         }
         // Não deixa a conta crescer para sempre.
         if self.rest_wheel.abs() > 1e6 {

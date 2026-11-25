@@ -7,6 +7,7 @@
 #   "t3 <teclas>"     traz o T3 para a frente e aperta as teclas
 #   "key <teclas>"    aperta as teclas onde o foco estiver
 #   "click left"      clique do mouse (left, right, middle)
+#   "scroll up"       rola para cima enquanto segura ("scroll down": para baixo)
 #   "run <comando>"   roda um comando (sh -c)
 #   "toggle"          liga/desliga o pad
 #   "none"            nada
@@ -39,8 +40,8 @@ curve = 2.2
 
 [scroll]
 # Os dois analógicos juntos para baixo (ou para cima) rolam a tela.
-enabled = true
-# Linhas por segundo com os dois no fim.
+enabled = false
+# Linhas por segundo: dos analógicos no fim, e de "scroll" segurado.
 speed = 25.0
 
 [buttons]
@@ -50,8 +51,8 @@ l2 = "t3 enter"
 r2 = "t3 enter"
 up = "t3 ctrl+shift+["     # conversa anterior
 down = "t3 ctrl+shift+]"   # próxima conversa
-left = "t3 ctrl+["         # voltar
-right = "t3 ctrl+]"        # avançar
+left = "scroll up"         # rola para cima (segure para continuar)
+right = "scroll down"      # rola para baixo
 l3 = "click left"
 r3 = "click left"
 a = "click left"

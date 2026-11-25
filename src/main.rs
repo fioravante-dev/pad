@@ -47,7 +47,9 @@ fn run() -> Result<()> {
     }
 
     // Um pad só por pessoa: dois apertariam tudo em dobro.
-    let uid = std::fs::metadata("/proc/self").map(|m| std::os::unix::fs::MetadataExt::uid(&m)).unwrap_or(0);
+    let uid = std::fs::metadata("/proc/self")
+        .map(|m| std::os::unix::fs::MetadataExt::uid(&m))
+        .unwrap_or(0);
     let addr = SocketAddr::from_abstract_name(format!("pad-{uid}"))?;
     let _lock = UnixListener::bind_addr(&addr).context("o pad já está rodando")?;
 
@@ -69,11 +71,17 @@ fn run() -> Result<()> {
     let mut last_check = Instant::now();
     let mut last_tick = Instant::now();
     loop {
-        let wait = if engine.moving() { Duration::from_millis(8) } else { Duration::from_millis(500) };
+        let wait = if engine.moving() {
+            Duration::from_millis(8)
+        } else {
+            Duration::from_millis(500)
+        };
         match rx.recv_timeout(wait) {
             Ok(ev) => engine.event(ev),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => anyhow::bail!("a thread do controle parou"),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                anyhow::bail!("a thread do controle parou")
+            }
         }
         let now = Instant::now();
         if now.duration_since(last_tick) >= Duration::from_millis(7) {

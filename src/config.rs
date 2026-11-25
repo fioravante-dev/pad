@@ -101,6 +101,8 @@ pub enum Action {
     /// Teclas; `true` traz o T3 para a frente antes.
     Keys(Vec<KeyCode>, bool),
     Click(Click),
+    /// Rola enquanto o botão está apertado: +1 para cima, -1 para baixo.
+    Scroll(i8),
     Run(String),
     Toggle,
 }
@@ -108,7 +110,9 @@ pub enum Action {
 impl Action {
     pub fn parse(s: &str) -> Result<Action> {
         let s = s.trim();
-        let (verb, rest) = s.split_once(char::is_whitespace).map_or((s, ""), |(v, r)| (v, r.trim()));
+        let (verb, rest) = s
+            .split_once(char::is_whitespace)
+            .map_or((s, ""), |(v, r)| (v, r.trim()));
         Ok(match verb.to_ascii_lowercase().as_str() {
             "" | "none" => Action::None,
             "talk" => Action::Talk,
@@ -121,6 +125,11 @@ impl Action {
                 "right" => Click::Right,
                 "middle" => Click::Middle,
                 other => bail!("clique desconhecido: {other:?}"),
+            }),
+            "scroll" => Action::Scroll(match rest.to_ascii_lowercase().as_str() {
+                "up" => 1,
+                "down" => -1,
+                other => bail!("rolagem desconhecida: {other:?} (up ou down)"),
             }),
             "run" if !rest.is_empty() => Action::Run(rest.to_string()),
             _ => bail!("ação desconhecida: {s:?}"),
@@ -187,11 +196,13 @@ fn key(name: &str) -> Result<KeyCode> {
         _ => {
             let up = lower.to_ascii_uppercase();
             let is_simple = (up.len() == 1 && up.chars().all(|c| c.is_ascii_alphanumeric()))
-                || (up.starts_with('F') && up[1..].parse::<u8>().is_ok_and(|n| (1..=24).contains(&n)));
+                || (up.starts_with('F')
+                    && up[1..].parse::<u8>().is_ok_and(|n| (1..=24).contains(&n)));
             if !is_simple {
                 bail!("tecla desconhecida: {name:?}");
             }
-            KeyCode::from_str(&format!("KEY_{up}")).map_err(|_| anyhow!("tecla desconhecida: {name:?}"))?
+            KeyCode::from_str(&format!("KEY_{up}"))
+                .map_err(|_| anyhow!("tecla desconhecida: {name:?}"))?
         }
     };
     Ok(k)
@@ -228,7 +239,9 @@ struct RawTalk {
 
 impl Default for RawTalk {
     fn default() -> Self {
-        RawTalk { command: "talk-rs toggle -l auto".into() }
+        RawTalk {
+            command: "talk-rs toggle -l auto".into(),
+        }
     }
 }
 
@@ -243,7 +256,12 @@ pub struct Mouse {
 
 impl Default for Mouse {
     fn default() -> Self {
-        Mouse { sticks: vec!["left".into(), "right".into()], speed: 1500.0, deadzone: 0.15, curve: 2.2 }
+        Mouse {
+            sticks: vec!["left".into(), "right".into()],
+            speed: 1500.0,
+            deadzone: 0.15,
+            curve: 2.2,
+        }
     }
 }
 
@@ -256,7 +274,10 @@ pub struct Scroll {
 
 impl Default for Scroll {
     fn default() -> Self {
-        Scroll { enabled: true, speed: 25.0 }
+        Scroll {
+            enabled: true,
+            speed: 25.0,
+        }
     }
 }
 
@@ -291,7 +312,10 @@ impl Config {
         let mut combos = Vec::new();
         for (action, names) in &raw.combos {
             let action = Action::parse(action).with_context(|| format!("no combo {action:?}"))?;
-            let buttons = names.iter().map(|n| Button::parse(n)).collect::<Result<Vec<_>>>()?;
+            let buttons = names
+                .iter()
+                .map(|n| Button::parse(n))
+                .collect::<Result<Vec<_>>>()?;
             if buttons.len() < 2 {
                 bail!("o combo {action:?} precisa de pelo menos 2 botões");
             }
@@ -333,7 +357,8 @@ impl Config {
             }
             std::fs::write(path, DEFAULT)?;
         }
-        let text = std::fs::read_to_string(path).with_context(|| format!("lendo {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("lendo {}", path.display()))?;
         Config::parse(&text).with_context(|| format!("em {}", path.display()))
     }
 
@@ -365,19 +390,37 @@ mod tests {
         assert_eq!(c.action(Button::L1), &Action::Talk);
         assert_eq!(
             c.action(Button::Up),
-            &Action::Keys(vec![KeyCode::KEY_LEFTCTRL, KeyCode::KEY_LEFTSHIFT, KeyCode::KEY_LEFTBRACE], true)
+            &Action::Keys(
+                vec![
+                    KeyCode::KEY_LEFTCTRL,
+                    KeyCode::KEY_LEFTSHIFT,
+                    KeyCode::KEY_LEFTBRACE
+                ],
+                true
+            )
         );
         assert!(c.in_combo(Button::Start));
         assert!(!c.in_combo(Button::A));
         assert!(c.left_stick_mouse && c.right_stick_mouse);
+        assert_eq!(c.action(Button::Left), &Action::Scroll(1));
+        assert_eq!(c.action(Button::Right), &Action::Scroll(-1));
     }
 
     #[test]
     fn keys() {
-        assert_eq!(parse_keys("ctrl++").unwrap(), vec![KeyCode::KEY_LEFTCTRL, KeyCode::KEY_EQUAL]);
+        assert_eq!(
+            parse_keys("ctrl++").unwrap(),
+            vec![KeyCode::KEY_LEFTCTRL, KeyCode::KEY_EQUAL]
+        );
         assert_eq!(parse_keys("f5").unwrap(), vec![KeyCode::KEY_F5]);
-        assert_eq!(parse_keys("super+d").unwrap(), vec![KeyCode::KEY_LEFTMETA, KeyCode::KEY_D]);
-        assert_eq!(parse_keys("KEY_RIGHTBRACE").unwrap(), vec![KeyCode::KEY_RIGHTBRACE]);
+        assert_eq!(
+            parse_keys("super+d").unwrap(),
+            vec![KeyCode::KEY_LEFTMETA, KeyCode::KEY_D]
+        );
+        assert_eq!(
+            parse_keys("KEY_RIGHTBRACE").unwrap(),
+            vec![KeyCode::KEY_RIGHTBRACE]
+        );
         assert!(parse_keys("banana").is_err());
     }
 }

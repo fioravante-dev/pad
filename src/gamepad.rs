@@ -26,7 +26,10 @@ pub enum Axis {
 
 #[derive(Debug)]
 pub enum Event {
-    Connected { name: String, path: PathBuf },
+    Connected {
+        name: String,
+        path: PathBuf,
+    },
     Disconnected,
     Button(Button, bool),
     /// -1 a 1; y positivo é para baixo.
@@ -44,11 +47,19 @@ impl Range {
     fn stick(self, v: i32) -> f64 {
         let mid = (self.min + self.max) / 2.0;
         let half = (self.max - self.min) / 2.0;
-        if half <= 0.0 { 0.0 } else { ((v as f64 - mid) / half).clamp(-1.0, 1.0) }
+        if half <= 0.0 {
+            0.0
+        } else {
+            ((v as f64 - mid) / half).clamp(-1.0, 1.0)
+        }
     }
     fn trigger(self, v: i32) -> f64 {
         let span = self.max - self.min;
-        if span <= 0.0 { 0.0 } else { ((v as f64 - self.min) / span).clamp(0.0, 1.0) }
+        if span <= 0.0 {
+            0.0
+        } else {
+            ((v as f64 - self.min) / span).clamp(0.0, 1.0)
+        }
     }
 }
 
@@ -61,16 +72,22 @@ fn is_gamepad(d: &Device) -> bool {
     if name.starts_with(OWN_PREFIX) {
         return false;
     }
-    let keys = d.supported_keys().is_some_and(|k| k.contains(KeyCode::BTN_SOUTH));
-    let axes = d.supported_absolute_axes().is_some_and(|a| a.contains(Abs::ABS_X) && a.contains(Abs::ABS_RX));
+    let keys = d
+        .supported_keys()
+        .is_some_and(|k| k.contains(KeyCode::BTN_SOUTH));
+    let axes = d
+        .supported_absolute_axes()
+        .is_some_and(|a| a.contains(Abs::ABS_X) && a.contains(Abs::ABS_RX));
     keys && axes
 }
 
 fn find(filter: &str) -> Option<(PathBuf, Device)> {
     let filter = filter.to_lowercase();
-    let mut all: Vec<(PathBuf, Device)> = evdev::enumerate().filter(|(_, d)| is_gamepad(d)).collect();
+    let mut all: Vec<(PathBuf, Device)> =
+        evdev::enumerate().filter(|(_, d)| is_gamepad(d)).collect();
     all.sort_by(|a, b| a.0.cmp(&b.0));
-    all.into_iter().find(|(_, d)| filter.is_empty() || d.name().unwrap_or("").to_lowercase().contains(&filter))
+    all.into_iter()
+        .find(|(_, d)| filter.is_empty() || d.name().unwrap_or("").to_lowercase().contains(&filter))
 }
 
 fn button(code: KeyCode) -> Option<Button> {
@@ -133,13 +150,24 @@ fn read(mut dev: Device, tx: &Sender<Event>) -> std::io::Result<()> {
     let state = dev.get_abs_state()?;
     let range = |a: Abs| {
         let s = state[a.0 as usize];
-        Range { min: s.minimum as f64, max: s.maximum as f64 }
+        Range {
+            min: s.minimum as f64,
+            max: s.maximum as f64,
+        }
     };
-    let (lx, ly, rx, ry) = (range(Abs::ABS_X), range(Abs::ABS_Y), range(Abs::ABS_RX), range(Abs::ABS_RY));
+    let (lx, ly, rx, ry) = (
+        range(Abs::ABS_X),
+        range(Abs::ABS_Y),
+        range(Abs::ABS_RX),
+        range(Abs::ABS_RY),
+    );
     let (lz, rz) = (range(Abs::ABS_Z), range(Abs::ABS_RZ));
     let mut trig = [false, false];
     let mut hat = [0i32, 0i32];
-    let send = |e: Event| tx.send(e).map_err(|_| std::io::Error::other("o pad fechou"));
+    let send = |e: Event| {
+        tx.send(e)
+            .map_err(|_| std::io::Error::other("o pad fechou"))
+    };
     loop {
         for ev in dev.fetch_events()? {
             match ev.destructure() {
@@ -154,10 +182,17 @@ fn read(mut dev: Device, tx: &Sender<Event>) -> std::io::Result<()> {
                     Abs::ABS_RX => send(Event::Axis(Axis::RightX, rx.stick(v)))?,
                     Abs::ABS_RY => send(Event::Axis(Axis::RightY, ry.stick(v)))?,
                     Abs::ABS_Z | Abs::ABS_RZ => {
-                        let (i, r, b) =
-                            if a == Abs::ABS_Z { (0, lz, Button::L2) } else { (1, rz, Button::R2) };
+                        let (i, r, b) = if a == Abs::ABS_Z {
+                            (0, lz, Button::L2)
+                        } else {
+                            (1, rz, Button::R2)
+                        };
                         let t = r.trigger(v);
-                        let now = if trig[i] { t > TRIGGER_OFF } else { t >= TRIGGER_ON };
+                        let now = if trig[i] {
+                            t > TRIGGER_OFF
+                        } else {
+                            t >= TRIGGER_ON
+                        };
                         if now != trig[i] {
                             trig[i] = now;
                             send(Event::Button(b, now))?;
@@ -165,7 +200,11 @@ fn read(mut dev: Device, tx: &Sender<Event>) -> std::io::Result<()> {
                     }
                     Abs::ABS_HAT0X | Abs::ABS_HAT0Y => {
                         let i = usize::from(a == Abs::ABS_HAT0Y);
-                        let (neg, pos) = if i == 0 { (Button::Left, Button::Right) } else { (Button::Up, Button::Down) };
+                        let (neg, pos) = if i == 0 {
+                            (Button::Left, Button::Right)
+                        } else {
+                            (Button::Up, Button::Down)
+                        };
                         let old = hat[i];
                         let new = v.signum();
                         if old != new {

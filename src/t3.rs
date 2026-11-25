@@ -10,7 +10,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use anyhow::{Context, Result, anyhow};
-use cosmic_protocols::toplevel_info::v1::client::{zcosmic_toplevel_handle_v1, zcosmic_toplevel_info_v1};
+use cosmic_protocols::toplevel_info::v1::client::{
+    zcosmic_toplevel_handle_v1, zcosmic_toplevel_info_v1,
+};
 use cosmic_protocols::toplevel_management::v1::client::zcosmic_toplevel_manager_v1;
 use wayland_client::backend::ObjectId;
 use wayland_client::protocol::{wl_registry, wl_seat};
@@ -51,19 +53,26 @@ impl T3 {
     /// Conecta ao COSMIC e sobe a thread que acompanha as janelas.
     pub fn connect() -> Result<T3> {
         if std::env::var_os("WAYLAND_DISPLAY").is_none() {
-            return Err(anyhow!("sem WAYLAND_DISPLAY (o pad precisa rodar dentro da sessão)"));
+            return Err(anyhow!(
+                "sem WAYLAND_DISPLAY (o pad precisa rodar dentro da sessão)"
+            ));
         }
         let conn = Connection::connect_to_env().context("sem conexão com o Wayland")?;
         let mut queue = conn.new_event_queue();
         let qh = queue.handle();
         let _registry = conn.display().get_registry(&qh, ());
         let shared = Arc::new(Mutex::new(Shared::default()));
-        let mut state = State { shared: shared.clone(), info: None };
+        let mut state = State {
+            shared: shared.clone(),
+            info: None,
+        };
         queue.roundtrip(&mut state)?;
         {
             let s = shared.lock().unwrap();
             if state.info.is_none() || s.manager.is_none() {
-                return Err(anyhow!("o compositor não tem os protocolos de janela do COSMIC"));
+                return Err(anyhow!(
+                    "o compositor não tem os protocolos de janela do COSMIC"
+                ));
             }
         }
         queue.roundtrip(&mut state)?;
@@ -87,13 +96,17 @@ impl T3 {
     /// A janela do T3 já está em foco?
     pub fn is_focused(&self) -> bool {
         let s = self.shared.lock().unwrap();
-        s.windows.values().any(|w| w.active && w.app_id == T3_APP_ID)
+        s.windows
+            .values()
+            .any(|w| w.active && w.app_id == T3_APP_ID)
     }
 
     /// Ativa a última janela do T3 em foco. `Ok(false)`: o T3 não está aberto.
     pub fn focus(&self) -> Result<bool> {
         let s = self.shared.lock().unwrap();
-        let (Some(manager), Some(seat)) = (&s.manager, &s.seat) else { return Ok(false) };
+        let (Some(manager), Some(seat)) = (&s.manager, &s.seat) else {
+            return Ok(false);
+        };
         let Some(w) = s
             .windows
             .values()
@@ -123,11 +136,20 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
         _: &Connection,
         qh: &QueueHandle<Self>,
     ) {
-        let wl_registry::Event::Global { name, interface, version } = event else { return };
+        let wl_registry::Event::Global {
+            name,
+            interface,
+            version,
+        } = event
+        else {
+            return;
+        };
         let mut s = state.shared.lock().unwrap();
         match interface.as_str() {
             "zcosmic_toplevel_info_v1" => state.info = Some(registry.bind(name, 1, qh, ())),
-            "zcosmic_toplevel_manager_v1" => s.manager = Some(registry.bind(name, version.min(2), qh, ())),
+            "zcosmic_toplevel_manager_v1" => {
+                s.manager = Some(registry.bind(name, version.min(2), qh, ()))
+            }
             "wl_seat" if s.seat.is_none() => s.seat = Some(registry.bind(name, 1, qh, ())),
             _ => {}
         }
@@ -145,7 +167,13 @@ impl Dispatch<zcosmic_toplevel_info_v1::ZcosmicToplevelInfoV1, ()> for State {
     ) {
         if let zcosmic_toplevel_info_v1::Event::Toplevel { toplevel } = event {
             let mut s = state.shared.lock().unwrap();
-            s.windows.insert(toplevel.id(), Window { handle: Some(toplevel), ..Window::default() });
+            s.windows.insert(
+                toplevel.id(),
+                Window {
+                    handle: Some(toplevel),
+                    ..Window::default()
+                },
+            );
         }
     }
 
@@ -169,7 +197,11 @@ impl Dispatch<zcosmic_toplevel_handle_v1::ZcosmicToplevelHandleV1, ()> for State
         match event {
             Event::AppId { app_id } => s.windows.entry(id).or_default().app_id = app_id,
             Event::State { state: raw } => {
-                let active = raw.as_chunks::<4>().0.iter().any(|c| u32::from_ne_bytes(*c) == ACTIVATED);
+                let active = raw
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|c| u32::from_ne_bytes(*c) == ACTIVATED);
                 s.tick += 1;
                 let tick = s.tick;
                 let w = s.windows.entry(id).or_default();
@@ -188,7 +220,15 @@ impl Dispatch<zcosmic_toplevel_handle_v1::ZcosmicToplevelHandleV1, ()> for State
 }
 
 impl Dispatch<wl_seat::WlSeat, ()> for State {
-    fn event(_: &mut Self, _: &wl_seat::WlSeat, _: wl_seat::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &wl_seat::WlSeat,
+        _: wl_seat::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 impl Dispatch<zcosmic_toplevel_manager_v1::ZcosmicToplevelManagerV1, ()> for State {

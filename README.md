@@ -6,8 +6,9 @@ remoto do T3 Code, no Linux com COSMIC. Leve: uma thread lendo o controle,
 
 - **L1 / R1**: traz o T3 para a frente (mesmo minimizado) e dispara o ditado
   do talk na caixinha onde você estava.
-- **L2 / R2**: Enter. **Direcional**: conversa anterior/próxima, voltar/avançar.
-- **Os dois analógicos**: mouse. Os dois juntos para baixo/cima: rolar.
+- **L2 / R2**: Enter. **Direcional ↑ ↓**: conversa anterior/próxima;
+  **← →**: rolar para cima/baixo (segure para continuar).
+- **Os dois analógicos**: mouse.
 - **Start + Select + L1 + L2**: liga/desliga o pad (vibra 1x ligado, 2x desligado).
 
 Tudo muda em `~/.config/pad/config.toml` (criado na primeira vez, com um
