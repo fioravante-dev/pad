@@ -21,6 +21,7 @@ use crate::out::Out;
 use crate::status::Shared;
 use crate::t3::T3;
 use crate::tray::{Handle, Tray};
+use crate::watch::Attention;
 
 pub struct Engine {
     cfg: Config,
@@ -70,6 +71,10 @@ impl Engine {
     }
 
     pub fn set_config(&mut self, cfg: Config) {
+        if let Some(t) = &self.tray {
+            let n = cfg.notify.enabled;
+            t.update(|t| t.notify = n);
+        }
         let changed = cfg.enabled != self.cfg.enabled;
         let enabled = cfg.enabled;
         self.cfg = cfg;
@@ -108,6 +113,7 @@ impl Engine {
                 if down { self.press(b) } else { self.release(b) }
             }
             Event::SetEnabled(on) => self.set_enabled(on, true),
+            Event::Attention(a) => self.attention(a),
             Event::Quit => {}
         }
     }
@@ -345,8 +351,30 @@ impl Engine {
         }
     }
 
+    /// O T3 precisa de você: vibra como o [notify] pede.
+    fn attention(&self, a: Attention) {
+        let n = &self.cfg.notify;
+        let wanted = match a {
+            Attention::Test => true,
+            Attention::Finished => n.enabled && n.finished,
+            Attention::Question => n.enabled && n.question,
+        };
+        if !wanted {
+            return;
+        }
+        eprintln!("[pad] T3: {a:?}");
+        let mag = |base: f64| (base * n.strength).round().clamp(0.0, 65535.0) as u16;
+        // A pergunta pede mais: uma tremida a mais que o fim de uma resposta.
+        let extra = u32::from(a == Attention::Question);
+        self.shake(n.pulses + extra, n.length_ms as u16, mag(65535.0), mag(52000.0));
+    }
+
     /// Tremidinha no controle: 1 = ligado, 2 = desligado.
     fn rumble(&self, times: u32) {
+        self.shake(times, 120, 0x6000, 0xa000);
+    }
+
+    fn shake(&self, times: u32, length: u16, strong: u16, weak: u16) {
         let Some(path) = self.device.clone() else {
             return;
         };
@@ -356,18 +384,15 @@ impl Engine {
                 let mut fx = dev.upload_ff_effect(FFEffectData {
                     direction: 0,
                     trigger: FFTrigger::default(),
-                    replay: FFReplay {
-                        length: 120,
-                        delay: 0,
-                    },
+                    replay: FFReplay { length, delay: 0 },
                     kind: FFEffectKind::Rumble {
-                        strong_magnitude: 0x6000,
-                        weak_magnitude: 0xa000,
+                        strong_magnitude: strong,
+                        weak_magnitude: weak,
                     },
                 })?;
                 for _ in 0..times {
                     fx.play(1)?;
-                    thread::sleep(Duration::from_millis(250));
+                    thread::sleep(Duration::from_millis(u64::from(length) + 130));
                 }
                 Ok(())
             };

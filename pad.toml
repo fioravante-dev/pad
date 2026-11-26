@@ -44,6 +44,18 @@ enabled = false
 # Linhas por segundo: dos analógicos no fim, e de "scroll" segurado.
 speed = 25.0
 
+[notify]
+# Vibra o controle quando o T3 precisa de você (lê o banco do T3, só leitura).
+enabled = true
+# Quando uma resposta termina (só as conversas de cima, não os subagentes).
+finished = true
+# Quando o T3 faz uma pergunta e fica esperando.
+question = true
+# Quantas tremidas (1 a 5), a força (0 a 1) e quanto dura cada uma (ms).
+pulses = 2
+strength = 0.6
+length_ms = 150
+
 [buttons]
 l1 = "talk"
 r1 = "talk"

@@ -12,6 +12,7 @@ mod status;
 mod t3;
 mod tray;
 mod ui;
+mod watch;
 
 use std::os::linux::net::SocketAddrExt;
 use std::os::unix::net::{SocketAddr, UnixListener};
@@ -73,10 +74,13 @@ fn run() -> Result<()> {
     };
     let (tx, rx) = mpsc::channel();
     gamepad::spawn(cfg.device.clone(), tx.clone());
+    watch::spawn(tx.clone());
     let status = status::Shared::default();
     ui::spawn(path.clone(), status.clone(), tx.clone());
     let tray = match (tray::Tray {
         enabled: cfg.enabled,
+        notify: cfg.notify.enabled,
+        path: path.clone(),
         tx: tx.clone(),
     })
     .spawn()

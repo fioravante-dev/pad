@@ -222,6 +222,8 @@ struct Raw {
     #[serde(default)]
     scroll: Scroll,
     #[serde(default)]
+    notify: Notify,
+    #[serde(default)]
     buttons: HashMap<String, String>,
     #[serde(default)]
     combos: HashMap<String, Vec<String>>,
@@ -281,6 +283,31 @@ impl Default for Scroll {
     }
 }
 
+/// A vibração quando o T3 precisa de você.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Notify {
+    pub enabled: bool,
+    pub finished: bool,
+    pub question: bool,
+    pub pulses: u32,
+    pub strength: f64,
+    pub length_ms: u32,
+}
+
+impl Default for Notify {
+    fn default() -> Self {
+        Notify {
+            enabled: true,
+            finished: true,
+            question: true,
+            pulses: 2,
+            strength: 0.6,
+            length_ms: 150,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Combo {
     pub buttons: Vec<Button>,
@@ -296,6 +323,7 @@ pub struct Config {
     pub right_stick_mouse: bool,
     pub mouse: Mouse,
     pub scroll: Scroll,
+    pub notify: Notify,
     pub buttons: HashMap<Button, Action>,
     pub combos: Vec<Combo>,
 }
@@ -336,6 +364,10 @@ impl Config {
         if !(0.0..0.95).contains(&mouse.deadzone) || mouse.curve <= 0.0 || mouse.speed < 0.0 {
             bail!("[mouse]: deadzone entre 0 e 0.95, curve e speed positivos");
         }
+        let n = &raw.notify;
+        if !(1..=5).contains(&n.pulses) || !(0.0..=1.0).contains(&n.strength) || !(30..=1000).contains(&n.length_ms) {
+            bail!("[notify]: pulses de 1 a 5, strength de 0 a 1, length_ms de 30 a 1000");
+        }
         Ok(Config {
             enabled: raw.enabled,
             device: raw.device,
@@ -344,6 +376,7 @@ impl Config {
             right_stick_mouse: right,
             mouse,
             scroll: raw.scroll,
+            notify: raw.notify,
             buttons,
             combos,
         })

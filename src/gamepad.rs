@@ -36,6 +36,8 @@ pub enum Event {
     Axis(Axis, f64),
     /// Da bandeja ou da tela de ajustes.
     SetEnabled(bool),
+    /// Do vigia do T3: vibrar para chamar a atenção.
+    Attention(crate::watch::Attention),
     Quit,
 }
 

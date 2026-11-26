@@ -163,6 +163,10 @@ fn serve(stream: TcpStream, path: &Path, status: &Shared, tx: &Sender<Event>) ->
             let _ = tx.send(Event::SetEnabled(on));
             json_ok(stream, json!({ "ok": true }))
         }
+        ("POST", "/api/rumble") => {
+            let _ = tx.send(Event::Attention(crate::watch::Attention::Test));
+            json_ok(stream, json!({ "ok": true }))
+        }
         ("POST", "/api/edit") => match edit(path, &req.body) {
             Ok(()) => json_ok(stream, json!({ "ok": true })),
             Err(e) => json_ok(stream, json!({ "ok": false, "error": format!("{e:#}") })),
@@ -187,6 +191,7 @@ fn state(path: &Path) -> Json {
             .and_then(|x| x.get(k))
             .and_then(|x| x.as_float().or_else(|| x.as_integer().map(|i| i as f64)))
     };
+    let get_bool = |t: &str, k: &str| doc.get(t).and_then(|x| x.get(k)).and_then(|x| x.as_bool());
     let buttons: serde_json::Map<String, Json> = Button::ALL
         .iter()
         .map(|b| {
@@ -226,6 +231,14 @@ fn state(path: &Path) -> Json {
             "curve": get_num("mouse", "curve").unwrap_or(2.2),
         },
         "scroll": { "speed": get_num("scroll", "speed").unwrap_or(25.0) },
+        "notify": {
+            "enabled": get_bool("notify", "enabled").unwrap_or(true),
+            "finished": get_bool("notify", "finished").unwrap_or(true),
+            "question": get_bool("notify", "question").unwrap_or(true),
+            "pulses": get_num("notify", "pulses").unwrap_or(2.0),
+            "strength": get_num("notify", "strength").unwrap_or(0.6),
+            "length_ms": get_num("notify", "length_ms").unwrap_or(150.0),
+        },
         "talk": get_str("talk", "command").unwrap_or_default(),
         "t3": t3_commands(),
     })
@@ -249,6 +262,11 @@ enum Edit {
     },
     RemoveCombo {
         action: String,
+    },
+    Flag {
+        section: String,
+        key: String,
+        value: bool,
     },
     Reset,
 }
@@ -274,7 +292,9 @@ fn edit(path: &Path, body: &[u8]) -> Result<()> {
             } => {
                 let ok = matches!(
                     (section.as_str(), key.as_str()),
-                    ("mouse", "speed" | "deadzone" | "curve") | ("scroll", "speed")
+                    ("mouse", "speed" | "deadzone" | "curve")
+                        | ("scroll", "speed")
+                        | ("notify", "pulses" | "strength" | "length_ms")
                 );
                 if !ok || !v.is_finite() {
                     bail!("ajuste desconhecido: {section}.{key}");
@@ -284,7 +304,12 @@ fn edit(path: &Path, body: &[u8]) -> Result<()> {
                     .get(&key)
                     .and_then(|i| i.as_value())
                     .map(|v| v.decor().clone());
-                let mut nv = toml_edit::Value::from((v * 1000.0).round() / 1000.0);
+                // Contagens e milissegundos são inteiros no arquivo.
+                let mut nv = if matches!(key.as_str(), "pulses" | "length_ms") {
+                    toml_edit::Value::from(v.round() as i64)
+                } else {
+                    toml_edit::Value::from((v * 1000.0).round() / 1000.0)
+                };
                 if let Some(d) = decor {
                     *nv.decor_mut() = d;
                 }
@@ -304,6 +329,29 @@ fn edit(path: &Path, body: &[u8]) -> Result<()> {
             Edit::RemoveCombo { action } => {
                 table(&mut doc, "combos").remove(&action);
             }
+            Edit::Flag {
+                section,
+                key,
+                value: on,
+            } => {
+                let ok = matches!(
+                    (section.as_str(), key.as_str()),
+                    ("notify", "enabled" | "finished" | "question")
+                );
+                if !ok {
+                    bail!("ajuste desconhecido: {section}.{key}");
+                }
+                let t = table(&mut doc, &section);
+                let decor = t
+                    .get(&key)
+                    .and_then(|i| i.as_value())
+                    .map(|v| v.decor().clone());
+                let mut nv = toml_edit::Value::from(on);
+                if let Some(d) = decor {
+                    *nv.decor_mut() = d;
+                }
+                t.insert(&key, Item::Value(nv));
+            }
             Edit::Reset => unreachable!(),
         }
         doc.to_string()
@@ -313,6 +361,12 @@ fn edit(path: &Path, body: &[u8]) -> Result<()> {
     std::fs::write(&tmp, &text)?;
     std::fs::rename(&tmp, path)?;
     Ok(())
+}
+
+/// Liga/desliga uma chave do arquivo (a bandeja usa).
+pub fn set_flag(path: &Path, section: &str, key: &str, on: bool) -> Result<()> {
+    let body = json!({ "op": "flag", "section": section, "key": key, "value": on });
+    edit(path, body.to_string().as_bytes())
 }
 
 fn table<'a>(doc: &'a mut DocumentMut, name: &str) -> &'a mut Table {

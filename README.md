@@ -9,6 +9,9 @@ remoto do T3 Code, no Linux com COSMIC. Leve: uma thread lendo o controle,
 - **L2 / R2**: Enter. **Direcional ↑ ↓**: conversa anterior/próxima;
   **← →**: rolar para cima/baixo (segure para continuar).
 - **Os dois analógicos**: mouse.
+- **Vibra quando o T3 precisa de você**: uma resposta terminou (2 tremidas) ou
+  ele perguntou algo e espera (3). Liga/desliga pela bandeja; força, duração e
+  quantas tremidas na tela de ajustes (`[notify]` no config).
 - **Start + Select + L1 + L2**: liga/desliga o pad (vibra 1x ligado, 2x desligado).
 
 ## Ajustes

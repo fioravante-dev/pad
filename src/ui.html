@@ -128,6 +128,13 @@ code { font: 12px ui-monospace, monospace; }
       </section>
 
       <section class="card">
+        <h2>Avisos do T3</h2>
+        <p class="hint">O controle vibra quando o T3 precisa de você. Uma pergunta ganha uma tremida a mais.</p>
+        <div id="notify"></div>
+        <div class="actions" style="margin-top:10px"><button class="ghost" id="testRumble">testar a vibração</button></div>
+      </section>
+
+      <section class="card">
         <h2>Mouse e rolagem</h2>
         <div id="sliders"></div>
       </section>
@@ -365,11 +372,40 @@ function renderSliders() {
   });
 }
 
+// ---- avisos do T3 -----------------------------------------------------------
+const NOTIFY_FLAGS = [
+  ["enabled", "Vibrar quando o T3 precisar de mim"],
+  ["finished", "quando uma resposta termina"],
+  ["question", "quando ele pergunta algo e espera"],
+];
+const NOTIFY_SLIDERS = [
+  ["pulses", "Tremidas", 1, 5, 1],
+  ["strength", "Força", 0.1, 1, 0.05],
+  ["length_ms", "Duração (ms)", 50, 600, 10],
+];
+function renderNotify() {
+  const n = S.notify;
+  $("notify").innerHTML =
+    NOTIFY_FLAGS.map(([k, l], i) => `<label class="chk" style="display:flex;margin:6px 0${i ? ";padding-left:22px" : ""}">
+      <input type="checkbox" data-k="${k}" ${n[k] ? "checked" : ""} ${i && !n.enabled ? "disabled" : ""}> ${l}</label>`).join("") +
+    NOTIFY_SLIDERS.map(([k, l, min, max, step]) => `
+      <label class="slider"><span>${l}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${n[k]}" data-n="${k}"><output>${n[k]}</output></label>`).join("");
+  $("notify").querySelectorAll("input[type=checkbox]").forEach((el) => {
+    el.onchange = async () => { await api("/api/edit", { op: "flag", section: "notify", key: el.dataset.k, value: el.checked }); load(); };
+  });
+  $("notify").querySelectorAll("input[type=range]").forEach((el) => {
+    el.oninput = () => el.nextElementSibling.textContent = el.value;
+    el.onchange = async () => { await api("/api/edit", { op: "number", section: "notify", key: el.dataset.n, value: +el.value }); S.notify[el.dataset.n] = +el.value; };
+  });
+}
+// A vibração de teste usa o arquivo: espera o pad reler (até 1 s).
+$("testRumble").onclick = () => setTimeout(() => api("/api/rumble", {}), 1100);
+
 function render() {
   $("banner").hidden = !S.error;
   $("banner").textContent = S.error ? "O config.toml tem um erro (o pad segue com o último que valia):\n" + S.error : "";
   $("path").textContent = S.path;
-  renderPad(); renderEditor(); renderCombos(); renderSliders();
+  renderPad(); renderEditor(); renderCombos(); renderNotify(); renderSliders();
 }
 
 // ---- ao vivo ----------------------------------------------------------------
