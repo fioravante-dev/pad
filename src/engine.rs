@@ -37,6 +37,8 @@ pub struct Engine {
     held_clicks: Vec<(Button, Click)>,
     /// Rolagens seguradas: botão, direção (+1 cima), desde quando.
     held_scrolls: Vec<(Button, i8, Instant)>,
+    /// Teclas ("key ...") seguradas: botão, teclas, próxima repetição.
+    held_keys: Vec<(Button, Vec<evdev::KeyCode>, Instant)>,
     /// lx, ly, rx, ry.
     axes: [f64; 4],
     device: Option<PathBuf>,
@@ -65,6 +67,7 @@ impl Engine {
             active_combos: HashSet::new(),
             held_clicks: Vec::new(),
             held_scrolls: Vec::new(),
+            held_keys: Vec::new(),
             axes: [0.0; 4],
             device: None,
         }
@@ -159,6 +162,7 @@ impl Engine {
             .retain(|&i| !combos.get(i).is_some_and(|c| c.buttons.contains(&b)));
         self.release_click(b);
         self.held_scrolls.retain(|(x, _, _)| *x != b);
+        self.held_keys.retain(|(x, _, _)| *x != b);
         let was_used = self.used.remove(&b);
         if self.cfg.in_combo(b) && !was_used {
             let action = self.cfg.action(b).clone();
@@ -215,6 +219,15 @@ impl Engine {
                 spawn(&self.cfg.talk_command);
                 Ok(())
             }
+            Action::Dictate => {
+                // O clique põe o foco (e o cursor) na caixa embaixo do mouse; o
+                // talk cola no foco quando o ditado termina, então clica também
+                // ao parar: o texto vai para onde o mouse está agora.
+                let c = Click::Left;
+                let r = self.out.click(c, true).and_then(|_| self.out.click(c, false));
+                spawn(&self.cfg.talk_command);
+                r
+            }
             Action::Focus => {
                 self.bring_t3();
                 Ok(())
@@ -222,6 +235,9 @@ impl Engine {
             Action::Keys(keys, t3) => {
                 if *t3 {
                     self.bring_t3();
+                } else if let Some(b) = holder {
+                    // Segurado, repete como num teclado (o ⌫ apaga em sequência).
+                    self.held_keys.push((b, keys.clone(), Instant::now() + KEY_DELAY));
                 }
                 self.out.keys(keys)
             }
@@ -277,6 +293,7 @@ impl Engine {
             let _ = self.out.click(c, false);
         }
         self.held_scrolls.clear();
+        self.held_keys.clear();
         self.out.reset_motion();
     }
 
@@ -298,6 +315,7 @@ impl Engine {
         let dz = self.cfg.mouse.deadzone;
         self.enabled
             && (!self.held_scrolls.is_empty()
+                || !self.held_keys.is_empty()
                 || stick(self.axes[0], self.axes[1], dz, 1.0).is_some()
                 || stick(self.axes[2], self.axes[3], dz, 1.0).is_some())
     }
@@ -306,6 +324,15 @@ impl Engine {
     pub fn tick(&mut self, dt: f64) {
         if !self.enabled {
             return;
+        }
+        let now = Instant::now();
+        for i in 0..self.held_keys.len() {
+            if now >= self.held_keys[i].2 {
+                self.held_keys[i].2 = now + KEY_REPEAT;
+                if let Err(e) = self.out.keys(&self.held_keys[i].1) {
+                    eprintln!("[pad] tecla falhou: {e:#}");
+                }
+            }
         }
         // Rolagem segurada: depois de um instante, rola contínuo.
         let held: f64 = self
@@ -402,6 +429,10 @@ impl Engine {
         });
     }
 }
+
+/// Tecla segurada: espera isto e então repete a cada `KEY_REPEAT`.
+const KEY_DELAY: Duration = Duration::from_millis(400);
+const KEY_REPEAT: Duration = Duration::from_millis(45);
 
 /// Linhas de um toque em "scroll".
 const SCROLL_STEP: f64 = 3.0;

@@ -3,6 +3,7 @@
 #
 # Ações (o texto de cada botão):
 #   "talk"            traz o T3 para a frente e dispara o ditado ([talk].command)
+#   "dictate"         clica onde está o mouse e dispara o ditado: o texto cai ali
 #   "focus"           só traz o T3 para a frente (mesmo minimizado)
 #   "t3 <teclas>"     traz o T3 para a frente e aperta as teclas
 #   "key <teclas>"    aperta as teclas onde o foco estiver
@@ -65,7 +66,7 @@ up = "t3 ctrl+shift+["     # conversa anterior
 down = "t3 ctrl+shift+]"   # próxima conversa
 left = "scroll up"         # rola para cima (segure para continuar)
 right = "scroll down"      # rola para baixo
-l3 = "click left"
+l3 = "dictate"      # clica onde está o mouse e dita ali
 r3 = "click left"
 a = "click left"
 b = "click right"

@@ -6,6 +6,9 @@ remoto do T3 Code, no Linux com COSMIC. Leve: uma thread lendo o controle,
 
 - **L1 / R1**: traz o T3 para a frente (mesmo minimizado) e dispara o ditado
   do talk na caixinha onde você estava.
+- **L3** (apertar o analógico): dita onde está o mouse. Clica ali (a caixa
+  ganha o foco) e dispara o talk; ao parar, clica de novo e o texto cai onde o
+  mouse estiver.
 - **L2 / R2**: Enter. **Direcional ↑ ↓**: conversa anterior/próxima;
   **← →**: rolar para cima/baixo (segure para continuar).
 - **Os dois analógicos**: mouse.
@@ -30,9 +33,21 @@ pad relê sozinho. A tela grava sem apagar os comentários.
 
 ## Instalar
 
+Sem o código (baixa o binário da última release, x86_64):
+
 ```sh
-./install.sh          # compila, põe em ~/.local/bin/pad e no autostart
-pad check             # confere o config.toml
+curl -fsSL https://raw.githubusercontent.com/fioravante-dev/pad/main/install.sh | sh
+```
+
+De dentro do código, `./install.sh` compila em vez de baixar. Os dois põem o
+pad em `~/.local/bin/pad`, criam o serviço `pad` do systemd do usuário (sobe
+com a sessão gráfica e volta sozinho se cair) e um atalho "pad" no menu de
+aplicativos, que abre os ajustes.
+
+```sh
+systemctl --user status pad      # rodando?
+systemctl --user restart pad
+pad check                        # confere o config.toml
 tail -f ~/.cache/pad/pad.log
 ```
 

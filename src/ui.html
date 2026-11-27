@@ -181,7 +181,7 @@ function parse(a) {
     return c ? { type: "t3cmd", arg: c.keys } : { type: "t3keys", arg: rest };
   }
   if (verb === "key") return { type: "keys", arg: rest };
-  if (["talk", "focus", "toggle", "none", "click", "scroll", "run"].includes(verb)) return { type: verb, arg: rest };
+  if (["talk", "dictate", "focus", "toggle", "none", "click", "scroll", "run"].includes(verb)) return { type: verb, arg: rest };
   return { type: "none", arg: "" };
 }
 function build(f) {
@@ -198,6 +198,7 @@ function describe(a) {
   const f = parse(a);
   switch (f.type) {
     case "talk": return "Ditar (talk)";
+    case "dictate": return "Ditar no mouse";
     case "focus": return "Trazer o T3";
     case "toggle": return "Liga/desliga";
     case "none": return "—";
@@ -240,6 +241,7 @@ function select(b) { selected = b; paintPad(); renderEditor(); }
 // ---- editor de ação ---------------------------------------------------------
 const TYPES = [
   ["talk", "Ditar (traz o T3 e dispara o talk)"],
+  ["dictate", "Ditar onde está o mouse (clica e dispara o talk)"],
   ["t3cmd", "Comando do T3"],
   ["focus", "Trazer o T3 para a frente"],
   ["scroll", "Rolar"],

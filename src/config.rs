@@ -97,6 +97,8 @@ pub enum Click {
 pub enum Action {
     None,
     Talk,
+    /// Clica onde está o mouse e dispara o ditado: o texto cai naquela caixa.
+    Dictate,
     Focus,
     /// Teclas; `true` traz o T3 para a frente antes.
     Keys(Vec<KeyCode>, bool),
@@ -116,6 +118,7 @@ impl Action {
         Ok(match verb.to_ascii_lowercase().as_str() {
             "" | "none" => Action::None,
             "talk" => Action::Talk,
+            "dictate" => Action::Dictate,
             "focus" => Action::Focus,
             "toggle" => Action::Toggle,
             "key" => Action::Keys(parse_keys(rest)?, false),
@@ -421,6 +424,7 @@ mod tests {
     fn default_parses() {
         let c = Config::parse(DEFAULT).unwrap();
         assert_eq!(c.action(Button::L1), &Action::Talk);
+        assert_eq!(c.action(Button::L3), &Action::Dictate);
         assert_eq!(
             c.action(Button::Up),
             &Action::Keys(
